@@ -1753,14 +1753,7 @@ template DsoRules with
         UnallocatedUnclaimedActivityRecord{..} <- fetchAndArchive (ForDso with dso) unallocatedUnclaimedActivityRecordCid
         assertWithinDeadline "UnallocatedUnclaimedActivityRecord.expiresAt" expiresAt
 
-        totalUnclaimedRewards <- sum <$> forA unclaimedRewardsToBurnCids \cid -> do
-          unclaimedReward <- fetchAndArchive (ForDso with dso) cid
-          pure unclaimedReward.amount
-        let leftover = totalUnclaimedRewards - amount
-        optUnclaimedRewardCid <-
-          if | leftover < 0.0 -> abort $ "insufficient unclaimed rewards: " <> show (negate leftover)
-             | leftover == 0.0 -> pure None
-             | otherwise -> Some <$> create UnclaimedReward with dso; amount = leftover
+        optUnclaimedRewardCid <- consumeUnclaimedRewards dso amount unclaimedRewardsToBurnCids
 
         unclaimedActivityRecordCid <- create UnclaimedActivityRecord with
           dso
@@ -2049,6 +2042,20 @@ enforceCooldown cooldownName cooldown lastActionTime = do
       let nextAllowedTime = lastTime `addRelTime` cooldown
       assertDeadlineExceeded cooldownName nextAllowedTime
     None -> pure () -- no last action time, so no enforcement needed
+
+
+-- Unclaimed rewards
+--------------------
+
+consumeUnclaimedRewards : Party -> Decimal -> [ContractId UnclaimedReward] -> Update (Optional (ContractId UnclaimedReward))
+consumeUnclaimedRewards dso amount unclaimedRewardCids = do
+  totalUnclaimedRewards <- sum <$> forA unclaimedRewardCids \cid -> do
+    unclaimedReward <- fetchAndArchive (ForDso with dso) cid
+    pure unclaimedReward.amount
+  let leftover = totalUnclaimedRewards - amount
+  if | leftover < 0.0 -> abort $ "insufficient unclaimed rewards: " <> show (negate leftover)
+     | leftover == 0.0 -> pure None
+     | otherwise -> Some <$> create UnclaimedReward with dso; amount = leftover
 
 
 -- Unallocated unclaimed activity record
