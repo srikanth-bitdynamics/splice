@@ -122,6 +122,8 @@ data DsoRules_ActionRequiringConfirmation
     -- ^ Create BootstrapExternalPartyConfigStateInstruction
   | SRARC_UpdateFeaturedAppRight DsoRules_UpdateFeaturedAppRight
     -- ^ Update a specific featured app right.
+  | SRARC_CreateUnclaimedRewardBurnInstruction DsoRules_CreateUnclaimedRewardBurnInstruction
+    -- ^ Voted action to create an UnclaimedRewardBurnInstruction contract.
   deriving (Eq, Show, Serializable)
 
 data AnsEntryContext_ActionRequiringConfirmation
@@ -396,6 +398,10 @@ data DsoRules_ExpireUnallocatedUnclaimedActivityRecordResult = DsoRules_ExpireUn
 
 data DsoRules_ExpireUnclaimedActivityRecordResult = DsoRules_ExpireUnclaimedActivityRecordResult with
     unclaimedRewardCid : ContractId UnclaimedReward
+  deriving (Serializable)
+
+data DsoRules_CreateUnclaimedRewardBurnInstructionResult = DsoRules_CreateUnclaimedRewardBurnInstructionResult with
+    instructionCid : ContractId UnclaimedRewardBurnInstruction
   deriving (Serializable)
 
 data DsoRules_CreateBootstrapExternalPartyConfigStateInstructionResult = DsoRules_CreateBootstrapExternalPartyConfigStateInstructionResult
@@ -1807,6 +1813,21 @@ template DsoRules with
           expectedDso = dso
         pure DsoRules_BootstrapExternalPartyConfigStateResult
 
+    -- Unclaimed reward burn instruction
+    ------------------------------------
+
+    nonconsuming choice DsoRules_CreateUnclaimedRewardBurnInstruction : DsoRules_CreateUnclaimedRewardBurnInstructionResult
+      with
+        amount : Decimal
+        reason : Text
+        expiresAt : Time
+      controller dso
+      do
+        now <- getTime
+        require "UnclaimedRewardBurnInstruction expires after current time" $ expiresAt > now
+        instructionCid <- create UnclaimedRewardBurnInstruction with dso; amount; reason; expiresAt
+        pure DsoRules_CreateUnclaimedRewardBurnInstructionResult with ..
+
 
 pruneAtLeastOne : Ord t => t -> Schedule t a -> Optional (Schedule t a)
 pruneAtLeastOne now schedule =
@@ -1869,6 +1890,7 @@ executeActionRequiringConfirmation dso dsoRulesCid amuletRulesCid act = case act
       SRARC_CreateTransferCommandCounter choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateUnallocatedUnclaimedActivityRecord choiceArg -> void $ exercise dsoRulesCid choiceArg
       SRARC_CreateBootstrapExternalPartyConfigStateInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
+      SRARC_CreateUnclaimedRewardBurnInstruction choiceArg -> void $ exercise dsoRulesCid choiceArg
   ARC_AnsEntryContext with .. -> do
     void $ fetchChecked (ForDso with dso) ansEntryContextCid
     case ansEntryContextAction of
@@ -2085,6 +2107,22 @@ template BootstrapExternalPartyConfigStateInstruction
   where
     signatory dso
 
+
+-- Unclaimed reward burn instruction
+------------------------------------
+
+-- | A governance-approved instruction to burn `amount` from the `UnclaimedReward` pool.
+-- It carries no contract ids so that the pool can be merged while the vote is open.
+template UnclaimedRewardBurnInstruction
+  with
+    dso : Party
+    amount : Decimal
+    reason : Text
+    expiresAt : Time
+  where
+    signatory dso
+    ensure amount > 0.0
+
 -- instances
 ------------
 
@@ -2099,6 +2137,9 @@ instance HasCheckedFetch VoteRequest ForDso where
 
 instance HasCheckedFetch UnallocatedUnclaimedActivityRecord ForDso where
   contractGroupId UnallocatedUnclaimedActivityRecord {..} = ForDso with dso
+
+instance HasCheckedFetch UnclaimedRewardBurnInstruction ForDso where
+  contractGroupId UnclaimedRewardBurnInstruction {..} = ForDso with dso
 
 instance HasCheckedFetch Confirmation ForDso where
   contractGroupId Confirmation {..} = ForDso with dso
