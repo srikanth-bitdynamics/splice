@@ -6,18 +6,27 @@ import org.lfdecentralizedtrust.splice.codegen.java.splice.amulet.{
   UnclaimedReward,
 }
 import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.actionrequiringconfirmation.ARC_DsoRules
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.SRARC_CreateUnallocatedUnclaimedActivityRecord
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.DsoRules_CreateUnallocatedUnclaimedActivityRecord
-import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.UnallocatedUnclaimedActivityRecord
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.dsorules_actionrequiringconfirmation.{
+  SRARC_CreateUnallocatedUnclaimedActivityRecord,
+  SRARC_CreateUnclaimedRewardBurnInstruction,
+}
+import org.lfdecentralizedtrust.splice.codegen.java.splice.dsorules.{
+  DsoRules_CreateUnallocatedUnclaimedActivityRecord,
+  DsoRules_CreateUnclaimedRewardBurnInstruction,
+  UnallocatedUnclaimedActivityRecord,
+  UnclaimedRewardBurnInstruction,
+}
 import org.lfdecentralizedtrust.splice.console.ValidatorAppBackendReference
 import org.lfdecentralizedtrust.splice.integration.EnvironmentDefinition
 import org.lfdecentralizedtrust.splice.sv.automation.delegatebased.{
   AllocateUnallocatedUnclaimedActivityRecordTrigger,
+  ExecuteUnclaimedRewardBurnInstructionTrigger,
   ExpiredUnallocatedUnclaimedActivityRecordTrigger,
   ExpiredUnclaimedActivityRecordTrigger,
+  ExpiredUnclaimedRewardBurnInstructionTrigger,
 }
 import org.lfdecentralizedtrust.splice.integration.tests.SpliceTests.SpliceTestConsoleEnvironment
-import org.lfdecentralizedtrust.splice.util.TriggerTestUtil
+import org.lfdecentralizedtrust.splice.util.{Tags, TriggerTestUtil}
 import org.lfdecentralizedtrust.splice.util.WalletTestUtil
 import org.lfdecentralizedtrust.splice.wallet.automation.CollectRewardsAndMergeAmuletsTrigger
 import com.daml.ledger.javaapi.data.Identifier
@@ -58,6 +67,49 @@ class UnclaimedActivityRecordIntegrationTest
 
   private def expiredUnclaimedTriggers(implicit env: SpliceTestConsoleEnvironment): Seq[Trigger] =
     activeSvs.map(_.dsoDelegateBasedAutomation.trigger[ExpiredUnclaimedActivityRecordTrigger])
+
+  private def burnTriggers(implicit env: SpliceTestConsoleEnvironment): Seq[Trigger] =
+    activeSvs.map(
+      _.dsoDelegateBasedAutomation.trigger[ExecuteUnclaimedRewardBurnInstructionTrigger]
+    )
+
+  private def expiredBurnTriggers(implicit env: SpliceTestConsoleEnvironment): Seq[Trigger] =
+    activeSvs.map(
+      _.dsoDelegateBasedAutomation.trigger[ExpiredUnclaimedRewardBurnInstructionTrigger]
+    )
+
+  private def burnInstructions()(implicit env: SpliceTestConsoleEnvironment) =
+    sv1Backend.participantClient.ledger_api_extensions.acs
+      .filterJava(UnclaimedRewardBurnInstruction.COMPANION)(dsoParty)
+
+  private def unclaimedRewardTotal()(implicit env: SpliceTestConsoleEnvironment): BigDecimal =
+    sv1Backend.participantClient.ledger_api_extensions.acs
+      .filterJava(UnclaimedReward.COMPANION)(dsoParty)
+      .map(r => scala.math.BigDecimal(r.data.amount))
+      .sum
+
+  private def createBurnVoteRequest(amountToBurn: Double, expiresAt: Instant)(implicit
+      env: SpliceTestConsoleEnvironment
+  ): Unit = {
+    val sv1Party = sv1Backend.getDsoInfo().svParty
+    val action = new ARC_DsoRules(
+      new SRARC_CreateUnclaimedRewardBurnInstruction(
+        new DsoRules_CreateUnclaimedRewardBurnInstruction(
+          BigDecimal(amountToBurn).bigDecimal,
+          "sv1 missed milestone 2 - vote",
+          expiresAt,
+        )
+      )
+    )
+    sv1Backend.createVoteRequest(
+      sv1Party.toProtoPrimitive,
+      action,
+      "url",
+      "sv1 missed milestone 2",
+      sv1Backend.getDsoInfo().dsoRules.payload.config.voteRequestTimeout,
+      None,
+    )
+  }
 
   private def mergeAmuletsTrigger(
       validatorBackend: ValidatorAppBackendReference,
@@ -280,5 +332,58 @@ class UnclaimedActivityRecordIntegrationTest
           ) shouldBe empty withClue "UnclaimedActivityRecord"
       }
     }
+  }
+
+  "UnclaimedRewards get burned" taggedAs Tags.SpliceDsoGovernance_0_1_30 in { implicit env =>
+    val sv1UserId = sv1WalletClient.config.ledgerApiUser
+    val amountToBurn = 15.0
+
+    clue("Mint some unclaimed rewards") {
+      Seq(12.0, 2.0, 5.0).foreach { amount =>
+        createUnclaimedReward(
+          sv1ValidatorBackend.participantClientWithAdminToken,
+          sv1UserId,
+          amount,
+        )
+      }
+    }
+    val poolBefore = unclaimedRewardTotal()
+
+    actAndCheck(
+      "Creating vote request",
+      createBurnVoteRequest(amountToBurn, Instant.now().plus(1, ChronoUnit.DAYS)),
+    )(
+      "the burn instruction has been executed",
+      _ => {
+        burnInstructions() shouldBe empty
+        unclaimedRewardTotal() shouldBe poolBefore - BigDecimal(amountToBurn)
+      },
+    )
+  }
+
+  "An UnclaimedRewardBurnInstruction gets expired" taggedAs Tags.SpliceDsoGovernance_0_1_30 in {
+    implicit env =>
+      setTriggersWithin(
+        triggersToPauseAtStart = burnTriggers
+      ) {
+        setTriggersWithin(
+          triggersToPauseAtStart = expiredBurnTriggers,
+          triggersToResumeAtStart = Seq.empty,
+        ) {
+          actAndCheck(
+            "Creating vote request for a burn that is not executed in time",
+            createBurnVoteRequest(15.0, Instant.now().plus(5, ChronoUnit.SECONDS)),
+          )(
+            "UnclaimedRewardBurnInstruction has been created",
+            _ => burnInstructions() should not be empty,
+          )
+        }
+
+        clue("UnclaimedRewardBurnInstruction gets archived") {
+          eventually() {
+            burnInstructions() shouldBe empty
+          }
+        }
+      }
   }
 }
