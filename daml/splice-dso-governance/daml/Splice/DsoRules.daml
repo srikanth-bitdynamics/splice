@@ -404,6 +404,14 @@ data DsoRules_CreateUnclaimedRewardBurnInstructionResult = DsoRules_CreateUnclai
     instructionCid : ContractId UnclaimedRewardBurnInstruction
   deriving (Serializable)
 
+data DsoRules_ExecuteUnclaimedRewardBurnInstructionResult = DsoRules_ExecuteUnclaimedRewardBurnInstructionResult with
+    burnedAmount : Decimal
+    optUnclaimedRewardCid : Optional (ContractId UnclaimedReward)
+  deriving (Serializable)
+
+data DsoRules_ExpireUnclaimedRewardBurnInstructionResult = DsoRules_ExpireUnclaimedRewardBurnInstructionResult
+  deriving (Serializable)
+
 data DsoRules_CreateBootstrapExternalPartyConfigStateInstructionResult = DsoRules_CreateBootstrapExternalPartyConfigStateInstructionResult
   with
     instructionCid : ContractId BootstrapExternalPartyConfigStateInstruction
@@ -1827,6 +1835,30 @@ template DsoRules with
         require "UnclaimedRewardBurnInstruction expires after current time" $ expiresAt > now
         instructionCid <- create UnclaimedRewardBurnInstruction with dso; amount; reason; expiresAt
         pure DsoRules_CreateUnclaimedRewardBurnInstructionResult with ..
+
+    nonconsuming choice DsoRules_ExecuteUnclaimedRewardBurnInstruction : DsoRules_ExecuteUnclaimedRewardBurnInstructionResult
+      with
+        instructionCid : ContractId UnclaimedRewardBurnInstruction
+        unclaimedRewardsToBurnCids : [ContractId UnclaimedReward]
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        UnclaimedRewardBurnInstruction{..} <- fetchAndArchive (ForDso with dso) instructionCid
+        assertWithinDeadline "UnclaimedRewardBurnInstruction.expiresAt" expiresAt
+        optUnclaimedRewardCid <- consumeUnclaimedRewards dso amount unclaimedRewardsToBurnCids
+        pure DsoRules_ExecuteUnclaimedRewardBurnInstructionResult with burnedAmount = amount; optUnclaimedRewardCid
+
+    nonconsuming choice DsoRules_ExpireUnclaimedRewardBurnInstruction : DsoRules_ExpireUnclaimedRewardBurnInstructionResult
+      with
+        instructionCid : ContractId UnclaimedRewardBurnInstruction
+        sv : Party
+      controller sv
+      do
+        _ <- getAndValidateSvParty this (Some sv)
+        instruction <- fetchAndArchive (ForDso with dso) instructionCid
+        assertDeadlineExceeded "UnclaimedRewardBurnInstruction.expiresAt" instruction.expiresAt
+        pure DsoRules_ExpireUnclaimedRewardBurnInstructionResult
 
 
 pruneAtLeastOne : Ord t => t -> Schedule t a -> Optional (Schedule t a)
