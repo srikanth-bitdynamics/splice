@@ -777,6 +777,14 @@ trait SvDsoStore
   ] =
     multiDomainAcsStore.listExpiredFromPayloadExpiry(UnallocatedUnclaimedActivityRecord.COMPANION)
 
+  def listExpiredUnclaimedRewardBurnInstruction: ListExpiredContracts[
+    splice.dsorules.UnclaimedRewardBurnInstruction.ContractId,
+    splice.dsorules.UnclaimedRewardBurnInstruction,
+  ] =
+    multiDomainAcsStore.listExpiredFromPayloadExpiry(
+      splice.dsorules.UnclaimedRewardBurnInstruction.COMPANION
+    )
+
   def listExpiredUnclaimedActivityRecord: ListExpiredContracts[
     splice.amulet.UnclaimedActivityRecord.ContractId,
     splice.amulet.UnclaimedActivityRecord,
