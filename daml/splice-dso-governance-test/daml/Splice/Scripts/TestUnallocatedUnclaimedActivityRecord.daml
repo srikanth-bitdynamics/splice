@@ -17,6 +17,7 @@ import Splice.Round
 
 import Splice.Scripts.DsoTestUtils
 import Splice.Scripts.Util
+import Splice.Testing.Utils
 
 test_UnclaimedActivityRecord_FullFlow : Script ()
 test_UnclaimedActivityRecord_FullFlow = do
@@ -324,3 +325,166 @@ mergeUnclaimedRewards app = do
     void $ submitExerciseAmuletRulesByKey app [app.dso] []
       AmuletRules_MergeUnclaimedRewards with
         unclaimedRewardCids = map fst unclaimedRewards
+
+-- Unclaimed reward burns
+
+test_UnclaimedRewardBurnInstruction_FullFlow : Script ()
+test_UnclaimedRewardBurnInstruction_FullFlow = do
+  (app, dso, (sv1, sv2, sv3, sv4)) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  unclaimedRewardsToBurnCids <- forA [4.0, 10.0] (mkUnclaimedReward dso)
+  now <- getTime
+  let
+    reason = "sv1 missed milestone 2"
+    expiresAt = now `addRelTime` days 2
+
+  initiateAndAcceptVote app [sv1, sv2, sv3, sv4] $
+    ARC_DsoRules with
+      dsoAction = SRARC_CreateUnclaimedRewardBurnInstruction
+        DsoRules_CreateUnclaimedRewardBurnInstruction with
+          amount = 12.0
+          reason
+          expiresAt
+
+  [(instructionCid, instruction)] <- query @UnclaimedRewardBurnInstruction dso
+  instruction === UnclaimedRewardBurnInstruction with dso; amount = 12.0; reason; expiresAt
+
+  result <- submit (actAs sv2 <> readAs dso) $
+    exerciseCmd dsoRulesCid DsoRules_ExecuteUnclaimedRewardBurnInstruction with
+      instructionCid
+      unclaimedRewardsToBurnCids
+      sv = sv2
+  result.burnedAmount === 12.0
+  query @UnclaimedRewardBurnInstruction dso >>= (=== [])
+
+test_DsoRules_CreateUnclaimedRewardBurnInstruction : Script ()
+test_DsoRules_CreateUnclaimedRewardBurnInstruction = do
+  (_app, dso, _svs) <- initMainNet
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  now <- getTime
+  let
+    valid = DsoRules_CreateUnclaimedRewardBurnInstruction with
+      amount = 15.0
+      reason = "sv1 missed milestone 2"
+      expiresAt = now `addRelTime` days 2
+
+  submitMustFail'' (expectMessageContains "Template precondition violated")
+    (actAs dso) $ void $ exerciseCmd dsoRulesCid valid with amount = 0.0
+  submitMustFail'' (expectMessageContains "Template precondition violated")
+    (actAs dso) $ void $ exerciseCmd dsoRulesCid valid with amount = -10.0
+  submitMustFail''
+    (expectUnmetRequirement "UnclaimedRewardBurnInstruction expires after current time")
+    (actAs dso) $
+    void $ exerciseCmd dsoRulesCid valid with expiresAt = now `addRelTime` (- hours 1)
+  submitMustFail''
+    (expectUnmetRequirement "UnclaimedRewardBurnInstruction expires after current time")
+    (actAs dso) $
+    void $ exerciseCmd dsoRulesCid valid with expiresAt = now
+  query @UnclaimedRewardBurnInstruction dso >>= (=== [])
+
+  result <- submit dso $ exerciseCmd dsoRulesCid valid
+  Some instruction <- queryContractId dso result.instructionCid
+  instruction === UnclaimedRewardBurnInstruction with
+    dso
+    amount = valid.amount
+    reason = valid.reason
+    expiresAt = valid.expiresAt
+
+test_DsoRules_ExecuteUnclaimedRewardBurnInstruction : Script ()
+test_DsoRules_ExecuteUnclaimedRewardBurnInstruction = do
+  (_app, dso, (_sv1, sv2, _sv3, _sv4)) <- initMainNet
+  alice <- allocateParty "alice"
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  now <- getTime
+  let expiresAt = now `addRelTime` days 2
+  instructionCid <- mkInstruction dso dsoRulesCid 12.0 expiresAt
+  reward4 <- mkUnclaimedReward dso 4.0
+  reward5 <- mkUnclaimedReward dso 5.0
+  reward10 <- mkUnclaimedReward dso 10.0
+  poolBefore <- poolTotal dso
+  let
+    execute sv unclaimedRewardsToBurnCids =
+      exerciseCmd dsoRulesCid DsoRules_ExecuteUnclaimedRewardBurnInstruction with
+        instructionCid
+        unclaimedRewardsToBurnCids
+        sv
+    expectNothingBurned = do
+      Some _ <- queryContractId dso instructionCid
+      poolTotal dso >>= (=== poolBefore)
+
+  submitMustFail'' (expectMessageContains "insufficient unclaimed rewards: 3.0")
+    (actAs sv2 <> readAs dso) $ void $ execute sv2 [reward4, reward5]
+  expectNothingBurned
+  -- Listing a reward twice must not count it twice.
+  submitMustFail (actAs sv2 <> readAs dso) $ execute sv2 [reward10, reward10]
+  expectNothingBurned
+  submitMustFail'' (expectUnmetRequirement "SV party is an actual SV")
+    (actAs alice <> readAs dso) $ void $ execute alice [reward4, reward10]
+  expectNothingBurned
+  setTime expiresAt
+  submitMustFail'' (expectErrorId "stdlib.daml.com/deadline-exceeded")
+    (actAs sv2 <> readAs dso) $ void $ execute sv2 [reward4, reward10]
+  expectNothingBurned
+  setTime now
+
+  result <- submit (actAs sv2 <> readAs dso) $ execute sv2 [reward4, reward10]
+  result.burnedAmount === 12.0
+  Some _ <- queryContractId dso dsoRulesCid
+  queryContractId dso instructionCid >>= (=== None)
+  queryContractId dso reward4 >>= (=== None)
+  queryContractId dso reward10 >>= (=== None)
+  Some _ <- queryContractId dso reward5
+  poolTotal dso >>= (=== poolBefore - 12.0)
+  Some leftoverCid <- pure result.optUnclaimedRewardCid
+  Some leftover <- queryContractId dso leftoverCid
+  leftover.amount === 2.0
+
+  exactInstructionCid <- mkInstruction dso dsoRulesCid 7.0 expiresAt
+  exactResult <- submit (actAs sv2 <> readAs dso) $
+    exerciseCmd dsoRulesCid DsoRules_ExecuteUnclaimedRewardBurnInstruction with
+      instructionCid = exactInstructionCid
+      unclaimedRewardsToBurnCids = [reward5, leftoverCid]
+      sv = sv2
+  exactResult.optUnclaimedRewardCid === None
+  poolTotal dso >>= (=== poolBefore - 19.0)
+
+test_DsoRules_ExpireUnclaimedRewardBurnInstruction : Script ()
+test_DsoRules_ExpireUnclaimedRewardBurnInstruction = do
+  (_app, dso, (_sv1, sv2, _sv3, _sv4)) <- initMainNet
+  alice <- allocateParty "alice"
+  [(dsoRulesCid, _)] <- query @DsoRules dso
+  now <- getTime
+  let expiresAt = now `addRelTime` days 2
+  instructionCid <- mkInstruction dso dsoRulesCid 12.0 expiresAt
+  _ <- mkUnclaimedReward dso 20.0
+  poolBefore <- poolTotal dso
+  let
+    expireInstruction sv =
+      exerciseCmd dsoRulesCid DsoRules_ExpireUnclaimedRewardBurnInstruction with
+        instructionCid
+        sv
+
+  submitMustFail'' (expectErrorId "stdlib.daml.com/deadline-not-exceeded")
+    (actAs sv2 <> readAs dso) $ void $ expireInstruction sv2
+  Some _ <- queryContractId dso instructionCid
+  setTime expiresAt
+  submitMustFail'' (expectUnmetRequirement "SV party is an actual SV")
+    (actAs alice <> readAs dso) $ void $ expireInstruction alice
+  Some _ <- queryContractId dso instructionCid
+
+  submit (actAs sv2 <> readAs dso) $ expireInstruction sv2
+  Some _ <- queryContractId dso dsoRulesCid
+  queryContractId dso instructionCid >>= (=== None)
+  poolTotal dso >>= (=== poolBefore)
+
+mkInstruction : Party -> ContractId DsoRules -> Decimal -> Time -> Script (ContractId UnclaimedRewardBurnInstruction)
+mkInstruction dso dsoRulesCid amount expiresAt = do
+  result <- submit dso $
+    exerciseCmd dsoRulesCid DsoRules_CreateUnclaimedRewardBurnInstruction with
+      amount
+      reason = "sv1 missed milestone 2"
+      expiresAt
+  pure result.instructionCid
+
+poolTotal : Party -> Script Decimal
+poolTotal dso = sum . map ((.amount) . snd) <$> query @UnclaimedReward dso
