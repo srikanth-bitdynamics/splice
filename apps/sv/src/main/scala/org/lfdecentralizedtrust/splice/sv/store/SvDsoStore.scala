@@ -1588,6 +1588,17 @@ object SvDsoStore {
             contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
           )
       },
+      mkFilter(splice.dsorules.UnclaimedRewardBurnInstruction.COMPANION)(
+        co => co.payload.dso == dso,
+        versionGuard = { case (pkgVersionSupport, now) =>
+          (tc) => pkgVersionSupport.supportsUnclaimedRewardBurn(Seq(dsoParty), now)(tc)
+        },
+      ) { contract =>
+        DsoAcsStoreRowData(
+          contract,
+          contractExpiresAt = Some(Timestamp.assertFromInstant(contract.payload.expiresAt)),
+        )
+      },
       mkFilter(splice.ans.amuletconversionratefeed.AmuletConversionRateFeed.COMPANION)(co =>
         co.payload.dso == dso
       ) { contract =>
