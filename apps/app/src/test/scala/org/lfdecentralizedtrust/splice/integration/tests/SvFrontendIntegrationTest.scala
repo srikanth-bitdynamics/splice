@@ -682,6 +682,15 @@ class SvFrontendIntegrationTest
       }
     }
 
+    "Burn Unclaimed Rewards" taggedAs Tags.SpliceDsoGovernance_0_1_30 in { implicit env =>
+      assertCreateProposal(
+        "SRARC_CreateUnclaimedRewardBurnInstruction",
+        "create-unclaimed-reward-burn-instruction",
+      ) { implicit webDriver =>
+        fillOutTextField("create-unclaimed-reward-burn-instruction-amount", "100.5")
+      }
+    }
+
     "Set Amulet Rules Configuration" in { implicit env =>
       assertCreateProposal("CRARC_SetConfig", "set-amulet-config-rules") { implicit webDriver =>
         eventually() {
