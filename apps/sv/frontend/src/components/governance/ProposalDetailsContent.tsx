@@ -44,6 +44,7 @@ import { JsonDiffAccordion } from './JsonDiffAccordion';
 import { useDsoInfos } from '../../contexts/SvContext';
 import { DetailItem } from './proposal-details/DetailItem';
 import { CreateUnallocatedUnclaimedActivityRecordSection } from './proposal-details/CreateUnallocatedUnclaimedActivityRecordSection';
+import { CreateUnclaimedRewardBurnInstructionSection } from './proposal-details/CreateUnclaimedRewardBurnInstructionSection';
 import { CopyableIdentifier, CopyableUrl, MemberIdentifier, VoteStats } from '../ui';
 import { useQuery } from '@tanstack/react-query';
 import { useSvAdminClient } from '../../contexts/SvAdminServiceContext';
@@ -263,6 +264,13 @@ export const ProposalDetailsContent: React.FC<ProposalDetailsContentProps> = pro
               beneficiary={proposalDetails.proposal.beneficiary}
               amount={proposalDetails.proposal.amount}
               mintBefore={proposalDetails.proposal.mintBefore}
+            />
+          )}
+
+          {proposalDetails.action === 'SRARC_CreateUnclaimedRewardBurnInstruction' && (
+            <CreateUnclaimedRewardBurnInstructionSection
+              amount={proposalDetails.proposal.amount}
+              burnBefore={proposalDetails.proposal.burnBefore}
             />
           )}
 

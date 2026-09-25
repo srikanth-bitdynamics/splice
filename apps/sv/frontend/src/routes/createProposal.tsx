@@ -4,6 +4,7 @@
 import { useSearchParams } from 'react-router';
 import { Loading } from '@canton-network/splice-common-frontend';
 import { CreateUnallocatedUnclaimedActivityRecordForm } from '../components/forms/CreateUnallocatedUnclaimedActivityRecordForm';
+import { CreateUnclaimedRewardBurnInstructionForm } from '../components/forms/CreateUnclaimedRewardBurnInstructionForm';
 import { GrantRevokeFeaturedAppForm } from '../components/forms/GrantRevokeFeaturedAppForm';
 import { OffboardSvForm } from '../components/forms/OffboardSvForm';
 import { SelectAction } from '../components/forms/SelectAction';
@@ -32,6 +33,8 @@ const ProposalForm: React.FC<{ action: SupportedActionTag }> = ({ action }) => {
       return <GrantRevokeFeaturedAppForm selectedAction={'SRARC_RevokeFeaturedAppRight'} />;
     case 'SRARC_CreateUnallocatedUnclaimedActivityRecord':
       return <CreateUnallocatedUnclaimedActivityRecordForm />;
+    case 'SRARC_CreateUnclaimedRewardBurnInstruction':
+      return <CreateUnclaimedRewardBurnInstructionForm />;
     case 'SRARC_SetConfig':
       return <SetDsoConfigRulesForm />;
     case 'CRARC_SetConfig':

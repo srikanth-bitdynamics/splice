@@ -29,6 +29,7 @@ import type {
   ProposalListingData,
   SupportedActionTag,
   UnclaimedActivityRecordProposal,
+  UnclaimedRewardBurnProposal,
   UnfeatureAppProposal,
   UpdateFeatureAppProposal,
   UpdateSvRewardWeightProposal,
@@ -51,6 +52,7 @@ export const actionTagToTitle = (amuletName: string): Record<SupportedActionTag,
   SRARC_OffboardSv: 'Offboard Member',
   SRARC_RevokeFeaturedAppRight: 'Unfeature Application',
   SRARC_CreateUnallocatedUnclaimedActivityRecord: 'Create Unclaimed Activity Record',
+  SRARC_CreateUnclaimedRewardBurnInstruction: 'Burn Unclaimed Rewards',
   SRARC_SetConfig: 'Set Decentralized Synchronizer Operations (DSO) Rules Configuration',
   SRARC_UpdateSvRewardWeight: 'Update Super Validator Reward Weight',
   SRARC_UpdateFeaturedAppRight: 'Update Featured Application',
@@ -72,6 +74,7 @@ export const createProposalActions: {
     name: 'Create Unclaimed Activity Record',
     value: 'SRARC_CreateUnallocatedUnclaimedActivityRecord',
   },
+  { name: 'Burn Unclaimed Rewards', value: 'SRARC_CreateUnclaimedRewardBurnInstruction' },
   { name: 'Set Amulet Rules Configuration', value: 'CRARC_SetConfig' },
   { name: 'Update Super Validator Reward Weight', value: 'SRARC_UpdateSvRewardWeight' },
 ];
@@ -204,6 +207,8 @@ export function buildProposal(action: ActionRequiringConfirmation, dsoInfo?: Dso
           dsoAction.value.amount,
           dsoAction.value.expiresAt
         );
+      case 'SRARC_CreateUnclaimedRewardBurnInstruction':
+        return createUnclaimedRewardBurnProposal(dsoAction.value.amount, dsoAction.value.expiresAt);
       case 'SRARC_GrantFeaturedAppRight':
         return createGrantFeatureAppProposal(
           dsoAction.value.provider,
@@ -280,6 +285,13 @@ function createUnallocatedUnclaimedActivityRecordProposal(
     amount: amount,
     mintBefore: mintBefore,
   };
+}
+
+function createUnclaimedRewardBurnProposal(
+  amount: string,
+  burnBefore: string
+): UnclaimedRewardBurnProposal {
+  return { amount, burnBefore };
 }
 
 function createAmuletRulesConfigProposal(

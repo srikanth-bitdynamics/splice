@@ -30,6 +30,8 @@ export const expirationSchema = getExpirationSchema('Expiration must be in the f
 
 export const mintBeforeSchema = getExpirationSchema('Date must be in the future');
 
+export const burnBeforeSchema = getExpirationSchema('Date must be in the future');
+
 export const effectiveDateSchema = z.string().refine(date => dayjs(date).isAfter(dayjs()), {
   message: 'Effective Date must be in the future',
 });
@@ -132,6 +134,11 @@ export const validateMintBefore = (value: string): string | false => {
   return result.success ? false : result.error.issues[0].message;
 };
 
+export const validateBurnBefore = (value: string): string | false => {
+  const result = burnBeforeSchema.safeParse(value);
+  return result.success ? false : result.error.issues[0].message;
+};
+
 export const validateMintedBeneficiary = (value: string): string | false => {
   const schema = z.string().min(1, { message: 'Beneficiary is required' });
 
@@ -181,6 +188,42 @@ export const validateMintBeforeAndEffectiveDate = (value: {
     );
 
   const result = schema.safeParse(value);
+  return result.success ? false : result.error.issues[0].message;
+};
+
+export const validateBurnBeforeAndEffectiveDate = (value: {
+  expiration: string;
+  effectiveDate?: string;
+  burnBefore: string;
+}): string | false => {
+  // At threshold the vote can take effect up to its expiration.
+  const takesEffectBy = value.effectiveDate ?? value.expiration;
+  const takesEffectByLabel = value.effectiveDate ? 'Effective Date' : 'Quorum Threshold Deadline';
+
+  const schema = z
+    .object({
+      takesEffectBy: z.string(),
+      burnBefore: z.string(),
+    })
+    .refine(
+      ({ takesEffectBy, burnBefore }) =>
+        dayjs(burnBefore).isAfter(dayjs(takesEffectBy).add(2, 'hour')),
+      {
+        message: `Burn Before date must be at least 2 hours after ${takesEffectByLabel}`,
+        path: ['burnBefore'],
+      }
+    );
+
+  const result = schema.safeParse({ takesEffectBy, burnBefore: value.burnBefore });
+  return result.success ? false : result.error.issues[0].message;
+};
+
+export const burnAmountSchema = rewardAmountSchema.refine(v => Number(v) > 0, {
+  message: 'Amount must be greater than zero',
+});
+
+export const validateBurnAmount = (value: string): string | false => {
+  const result = burnAmountSchema.safeParse(value);
   return result.success ? false : result.error.issues[0].message;
 };
 

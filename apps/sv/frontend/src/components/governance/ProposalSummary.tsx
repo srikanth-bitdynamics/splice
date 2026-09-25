@@ -76,6 +76,11 @@ type ProposalSummaryProps = BaseProposalSummaryProps &
         expiresAt: string;
       }
     | {
+        formType: 'create-unclaimed-reward-burn-instruction';
+        amount: string;
+        expiresAt: string;
+      }
+    | {
         formType: 'update-right-weight';
         providerPartyId: string;
         rightCid: string;
@@ -251,6 +256,17 @@ export const ProposalSummary: React.FC<ProposalSummaryProps> = props => {
             <ProposalReviewField
               id="expiresAt"
               label="Must Mint Before"
+              value={formatDatetimeWithOffset(props.expiresAt)}
+            />
+          </>
+        )}
+
+        {formType === 'create-unclaimed-reward-burn-instruction' && (
+          <>
+            <ProposalReviewField id="amount" label="Amount" value={props.amount} />
+            <ProposalReviewField
+              id="expiresAt"
+              label="Must Burn Before"
               value={formatDatetimeWithOffset(props.expiresAt)}
             />
           </>

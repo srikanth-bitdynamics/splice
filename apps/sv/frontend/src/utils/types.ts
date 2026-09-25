@@ -10,6 +10,7 @@ import type {
 } from '@daml.js/splice-dso-governance/lib/Splice/DsoRules';
 import type { ConfigFieldState } from '../components/form-components/ConfigField';
 import type { CreateUnallocatedUnclaimedActivityRecordFormData } from '../components/forms/CreateUnallocatedUnclaimedActivityRecordForm';
+import type { CreateUnclaimedRewardBurnInstructionFormData } from '../components/forms/CreateUnclaimedRewardBurnInstructionForm';
 import type { GrantRevokeFeaturedAppFormData } from '../components/forms/GrantRevokeFeaturedAppForm';
 import type { OffboardSvFormData } from '../components/forms/OffboardSvForm';
 import type { SetAmuletConfigCompleteFormData } from '../components/forms/SetAmuletConfigRulesForm';
@@ -38,6 +39,11 @@ export interface UnclaimedActivityRecordProposal {
   beneficiary: string;
   amount: string;
   mintBefore: string;
+}
+
+export interface UnclaimedRewardBurnProposal {
+  amount: string;
+  burnBefore: string;
 }
 
 /**
@@ -97,6 +103,7 @@ export type Proposal =
   | UnfeatureAppProposal
   | UpdateSvRewardWeightProposal
   | UnclaimedActivityRecordProposal
+  | UnclaimedRewardBurnProposal
   | AmuletRulesConfigProposal
   | DsoRulesConfigProposal
   | UpdateFeatureAppProposal
@@ -108,6 +115,7 @@ export type ProposalActionMap = {
   SRARC_RevokeFeaturedAppRight: UnfeatureAppProposal;
   SRARC_UpdateSvRewardWeight: UpdateSvRewardWeightProposal;
   SRARC_CreateUnallocatedUnclaimedActivityRecord: UnclaimedActivityRecordProposal;
+  SRARC_CreateUnclaimedRewardBurnInstruction: UnclaimedRewardBurnProposal;
   CRARC_SetConfig: AmuletRulesConfigProposal;
   SRARC_SetConfig: DsoRulesConfigProposal;
   SRARC_UpdateFeaturedAppRight: UpdateFeatureAppProposal;
@@ -150,6 +158,7 @@ export type SupportedActionTag =
   | 'SRARC_SetConfig'
   | 'SRARC_UpdateSvRewardWeight'
   | 'SRARC_CreateUnallocatedUnclaimedActivityRecord'
+  | 'SRARC_CreateUnclaimedRewardBurnInstruction'
   | 'SRARC_UpdateFeaturedAppRight';
 
 export type ProposalListingStatus =
@@ -227,6 +236,7 @@ export type NonConfigProposalFormData =
   | OffboardSvFormData
   | GrantRevokeFeaturedAppFormData
   | CreateUnallocatedUnclaimedActivityRecordFormData
+  | CreateUnclaimedRewardBurnInstructionFormData
   | UpdateFeatureAppFormData;
 
 export type ConfigProposalFormData = SetDsoConfigCompleteFormData | SetAmuletConfigCompleteFormData;

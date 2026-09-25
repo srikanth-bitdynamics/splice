@@ -55,7 +55,11 @@ release-notes:: Upcoming
 
         - The ``DsoRulesConfig`` proposal form can now set ``svOperationsSwitchOverTimes``.
 
+        - SVs can now propose and vote on burns from the unclaimed rewards pool.
+
     - Daml
+
+        - Added choices to create, execute and expire unclaimed reward burn instructions.
 
         - Fix a bug in MintingDelegation that wrongly allowed the delegate to share their own coupons within a minting delegation.
 
