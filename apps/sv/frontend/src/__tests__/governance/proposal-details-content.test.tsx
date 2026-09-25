@@ -13,6 +13,7 @@ import {
   ProposalVote,
   ProposalVotingInformation,
   UnclaimedActivityRecordProposal,
+  UnclaimedRewardBurnProposal,
   UpdateFeatureAppProposal,
   UpdateSvRewardWeightProposal,
 } from '../../utils/types';
@@ -514,6 +515,41 @@ describe('Proposal Details Content', () => {
 
     const mustMintBefore = screen.getByTestId('proposal-details-must-mint-before-value');
     expect(mustMintBefore.textContent).toMatch(/2025-01-01 13:00/);
+  });
+
+  test('should render unclaimed reward burn instruction details', () => {
+    const proposalDetails: ProposalDetails = {
+      actionName: 'Burn Unclaimed Rewards',
+      action: 'SRARC_CreateUnclaimedRewardBurnInstruction',
+      createdAt: '2025-01-01 13:00',
+      url: 'https://example.com',
+      summary: 'Summary of the proposal',
+      proposal: {
+        amount: '10',
+        burnBefore: '2025-01-01 13:00',
+      } as UnclaimedRewardBurnProposal,
+    };
+
+    render(
+      <Wrapper>
+        <ProposalDetailsContent
+          currentSvPartyId={voteRequest.votingInformation.requester}
+          contractId={voteRequest.contractId}
+          proposalDetails={proposalDetails}
+          votingInformation={voteRequest.votingInformation}
+          votes={voteRequest.votes}
+        />
+      </Wrapper>
+    );
+
+    const action = screen.getByTestId('proposal-details-action-value');
+    expect(action.textContent).toMatch(/Burn Unclaimed Rewards/);
+
+    const amount = screen.getByTestId('proposal-details-amount-value');
+    expect(amount.textContent).toMatch(/10/);
+
+    const mustBurnBefore = screen.getByTestId('proposal-details-must-burn-before-value');
+    expect(mustBurnBefore.textContent).toMatch(/2025-01-01 13:00/);
   });
 
   test('should render amulet rules config proposal details', () => {

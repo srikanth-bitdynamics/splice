@@ -1,9 +1,9 @@
 // Copyright (c) 2024 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 // SPDX-License-Identifier: Apache-2.0
 
-import { describe, it, expect } from 'vitest';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
+import { describe, expect, it } from 'vitest';
 import {
   configValueToSwitchOverMap,
   isSwitchOverField,
@@ -11,6 +11,10 @@ import {
   switchOverConfigValueToDisplayEntries,
   switchOverEntriesToConfigValue,
   switchOverMapToConfigValue,
+  validateBurnAmount,
+  validateBurnBefore,
+  validateExpiration,
+  validateExpiryEffectiveDate,
   validateSwitchOverTimes,
   visibleSwitchOverRows,
 } from '../components/forms/formValidators';
@@ -217,5 +221,45 @@ describe('switch-over display helpers', () => {
       { key: 'amulet-v2', time: '2026-09-10T08:00:00Z' },
     ];
     expect(visibleSwitchOverRows(entries)).toEqual([{ entry: entries[1], index: 1 }]);
+  });
+});
+
+describe('burn proposal validation', () => {
+  it.each<[string, string | false]>([
+    ['0', 'Amount must be greater than zero'],
+    ['0.0000000000', 'Amount must be greater than zero'],
+    ['0.0000000001', false],
+    ['100.1234567891', false],
+    ['100.12345678912', 'Amount can have at most 10 decimal places'],
+    ['100.', 'Amount must be a valid number'],
+  ])('validates burn amount %s', (amount, error) => {
+    expect(validateBurnAmount(amount)).toBe(error);
+  });
+
+  it('requires the burn deadline and voting deadline to be in the future', () => {
+    const past = dayjs().subtract(1, 'day').toISOString();
+    const future = dayjs().add(1, 'day').toISOString();
+
+    expect(validateBurnBefore(past)).toBe('Date must be in the future');
+    expect(validateBurnBefore(future)).toBe(false);
+    expect(validateExpiration(past)).toBe('Expiration must be in the future');
+    expect(validateExpiration(future)).toBe(false);
+  });
+
+  it('requires a scheduled effective date to follow the voting deadline', () => {
+    const expiration = dayjs().add(1, 'week');
+
+    expect(
+      validateExpiryEffectiveDate({
+        expiration: expiration.toISOString(),
+        effectiveDate: expiration.subtract(1, 'day').toISOString(),
+      })
+    ).toBe('Effective Date must be after expiration date');
+    expect(
+      validateExpiryEffectiveDate({
+        expiration: expiration.toISOString(),
+        effectiveDate: expiration.add(1, 'day').toISOString(),
+      })
+    ).toBe(false);
   });
 });
