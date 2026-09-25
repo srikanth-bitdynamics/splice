@@ -287,6 +287,23 @@ export const ActionView: React.FC<{
           </>
         );
       }
+      case 'SRARC_CreateUnclaimedRewardBurnInstruction': {
+        return (
+          <>
+            <ActionValueTable
+              actionType={actionType}
+              actionName={dsoAction.tag}
+              valuesMap={{
+                Amount: <Typography>{dsoAction.value.amount}</Typography>,
+                'Must Burn Before': (
+                  <DateWithDurationDisplay datetime={dsoAction.value.expiresAt} />
+                ),
+              }}
+            />
+            {getConfirmationDialog(confirmationDialogProps, expiresAt)}
+          </>
+        );
+      }
     }
   } else if (action.tag === 'ARC_AmuletRules') {
     const amuletRulesAction = action.value.amuletRulesAction;
